@@ -1,5 +1,6 @@
 from math import pi
 from qiskit import QuantumRegister, QuantumCircuit, AncillaRegister
+from qiskit.circuit.classicalregister import ClassicalRegister
 from qft import qft, iqft, cqft, ciqft, ccu1
 
 ################################################################################
@@ -323,13 +324,6 @@ def power(circ, a, b, finalOut): #Because this is reversible/gate friendly memor
     padAList = full_qr(aPad)
     aList = full_qr(a)
     a = aList + padAList
-
-    # Create a register d for mults and init with state 1
-    d = AncillaRegister(len(finalOut)) # Unsure of where to Anciallas these
-    circ.add_register(d)
-
-    # Set d to 1
-    circ.x(d[0])
     
     # Create zero bits
     num_recycle = 2
@@ -339,11 +333,22 @@ def power(circ, a, b, finalOut): #Because this is reversible/gate friendly memor
         circ.add_register(permaZeros)
         permaZeros = full_qr(permaZeros)
         finalOut = full_qr(finalOut) + permaZeros
+    
+    # Create a register d for mults and init with state 1
+    d = AncillaRegister(len(finalOut)) # Unsure of where to Anciallas these
+    circ.add_register(d)
+    circ.x(d[0])
 
     r = 2
     # iterate through every qubit of b
     for i in range(0,v): # for every bit of b 
         cmult(circ, [b[i]], a[:r], d[:r], finalOut[:r * 2], r)
-        circ.cswap([b[i]], d[:r*2], finalOut[:r * 2])
+        for swap_target in range(0, r*2):
+            circ.cswap(b[i], d[swap_target], finalOut[swap_target])
+        circ.cx(b[i], finalOut[0])
 
         r *= 2
+    
+    cd = ClassicalRegister(len(d))
+    circ.add_register(cd)
+    circ.measure(d, cd)
