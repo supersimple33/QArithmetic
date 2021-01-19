@@ -318,65 +318,32 @@ def power(circ, a, b, finalOut): #Because this is reversible/gate friendly memor
     v = len(b)
 
     # Left 0 pad a, to satisfy multiplication function arguments
-    aPad = AncillaRegister(n * (pow(2, v) - 3)) # Unsure of where to Anciallas these
+    aPad = AncillaRegister(2)
     circ.add_register(aPad)
     padAList = full_qr(aPad)
     aList = full_qr(a)
     a = aList + padAList
 
     # Create a register d for mults and init with state 1
-    d = AncillaRegister(n) # Unsure of where to Anciallas these
+    d = AncillaRegister(len(finalOut)) # Unsure of where to Anciallas these
     circ.add_register(d)
 
-    # Create a register for tracking the output of cmult to the end
-    ancOut = AncillaRegister(n*2) # Unsure of where to Anciallas these
-    circ.add_register(ancOut)
-
-    # Left 0 pad finalOut to provide safety to the final multiplication
-    if (len(a) * 2) - len(finalOut) > 0:
-        foPad = AncillaRegister((len(a) * 2) - len(finalOut))
-        circ.add_register(foPad)
-        padFoList = full_qr(foPad)
-        foList = full_qr(finalOut)
-        finalOut = foList + padFoList
+    # Set d to 1
+    circ.x(d[0])
     
     # Create zero bits
-    num_recycle = (2 * n * (pow(2, v) - 2)) - (n * pow(2, v)) # 24
+    num_recycle = 2
     permaZeros = []
     if num_recycle > 0:
         permaZeros = AncillaRegister(num_recycle) #8
         circ.add_register(permaZeros)
         permaZeros = full_qr(permaZeros)
+        finalOut = full_qr(finalOut) + permaZeros
 
-    # Instead of MULT copy bits over
-    if v >= 1:
-        for i in range(n):
-            circ.ccx(b[0], a[i], d[i])
-        circ.x(b[0])
-        circ.cx(b[0], d[0])
-        circ.x(b[0])
-    
+    r = 2
     # iterate through every qubit of b
-    for i in range(1,v): # for every bit of b 
-        for j in range(pow(2, i)):
-            # run multiplication operation if and only if b is 1
-            bonus = permaZeros[:2*len(d) - len(ancOut)]
-            cmult(circ, [b[i]], a[:len(d)], d, full_qr(ancOut) + bonus, len(d))
+    for i in range(0,v): # for every bit of b 
+        cmult(circ, [b[i]], a[:r], d[:r], finalOut[:r * 2], r)
+        circ.cswap([b[i]], d[:r*2], finalOut[:r * 2])
 
-            # if the multiplication was not run copy the qubits so they are not destroyed when creating new register
-            circ.x(b[i])
-            for qub in range(0,len(d)):
-                circ.ccx(b[i], d[qub], ancOut[qub])
-            circ.x(b[i])
-
-            # Move the output to the input for next function and double the qubit length
-            d = ancOut
-
-            if i == v - 1 and j == pow(2, i) - 2:
-                # this is the second to last step send qubiits to output
-                ancOut = finalOut
-            elif not (i == v - 1 and j == pow(2, i) - 1):
-                # if this is not the very last step
-                # create a new output register of twice the length and register it
-                ancOut = AncillaRegister(len(d) + n) # Should label permazero bits
-                circ.add_register(ancOut)
+        r *= 2
